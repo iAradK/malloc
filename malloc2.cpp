@@ -158,7 +158,6 @@ void sfree(void* p) {
     if (p == NULL) return;;
     MallocMetadata* meta;
     _getMetaData(p, &meta);
-    void* meta_addr = (void*) ((int64_t)p - sizeof(MallocMetadata));
     meta->is_free = true;
 }
 

@@ -154,12 +154,31 @@ void* scalloc(size_t num, size_t size) {
     return ret_addr;
 }
 
+
+static void glueTogether(MallocMetadata* toFree){
+    MallocMetadata* prev = toFree->prev;
+    MallocMetadata* next = toFree->next;
+    MallocMetadata* start = toFree;
+    size_t size = toFree->size;
+    if (prev->is_free){
+        start = prev;
+        size = size + prev->size + sizeof(MallocMetadata);
+        start->next = next;
+        start->size = size;
+    }
+    if (next->is_free){
+        size = size + next->size + sizeof(MallocMetadata);
+        start->next = next->next;
+        start->size = size;
+    }
+    start->is_free = true;
+
+}
 void sfree(void* p) {
     if (p == NULL) return;;
     MallocMetadata* meta;
     _getMetaData(p, &meta);
-    void* meta_addr = (void*) ((int64_t)p - sizeof(MallocMetadata));
-    meta->is_free = true;
+    glueTogether(meta);
 }
 
 void* srealloc(void* oldp, size_t size) {
