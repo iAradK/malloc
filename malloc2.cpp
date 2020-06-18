@@ -132,7 +132,8 @@ void* smalloc(size_t size) {
     if (_check(size) == false) return NULL;
     MallocMetadata* empty_block = _find(size);
     if (empty_block != NULL) // if found an existing empty block
-        return empty_block;
+        return (void*) ((int64_t)empty_block + sizeof(MallocMetadata));
+
 
     void* sbrk_ret = sbrk(size + sizeof(MallocMetadata)); // increase heap
     int val = *((int*)sbrk_ret);
@@ -140,6 +141,7 @@ void* smalloc(size_t size) {
 
     MallocMetadata* new_meta;
     _createNewMetaData(sbrk_ret, size, &new_meta);
+    new_meta->is_free = false;
 
     void* ret_addr = (void*) ((int64_t)sbrk_ret + sizeof(MallocMetadata)); // Get the actual data address
     return ret_addr;
@@ -157,10 +159,13 @@ void sfree(void* p) {
     MallocMetadata* meta;
     _getMetaData(p, &meta);
     void* meta_addr = (void*) ((int64_t)p - sizeof(MallocMetadata));
-    meta->is_free = false;
+    meta->is_free = true;
 }
 
 void* srealloc(void* oldp, size_t size) {
+    if (oldp == NULL)
+        return smalloc(size);
+
     MallocMetadata* meta;
     _getMetaData(oldp, &meta);
     if (meta->size > size) return oldp;
@@ -170,7 +175,6 @@ void* srealloc(void* oldp, size_t size) {
 
     memcpy(new_addr, oldp, size);
     sfree(oldp);
-
     return new_addr;
 }
 
