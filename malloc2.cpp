@@ -2,6 +2,12 @@
 #define MALLOC2
 
 #include <unistd.h>
+#include <iostream>
+#include <stdio.h>
+#include <string.h>
+
+
+using namespace std;
 
 struct MallocMetadata {
     size_t size;
@@ -33,11 +39,56 @@ MallocMetadata* _find(size_t size) {
     return NULL;
 }
 
+size_t _num_free_blocks() {
+    size_t num = 0;
+    MallocMetadata* cur = _head;
+    while (cur != NULL) {
+        if (cur->is_free) num++;
+        cur = cur->next;
+    }
+    return num;
+}
+
+size_t _num_free_bytes() {
+    size_t num = 0;
+    MallocMetadata* cur = _head;
+    while (cur != NULL) {
+        if (cur->is_free) num += cur->size;
+        cur = cur->next;
+    }
+    return num;
+}
+
+size_t _num_allocated_blocks() {
+    size_t num = 0;
+    MallocMetadata* cur = _head;
+    while (cur != NULL) {
+        if (!cur->is_free) num++;
+        cur = cur->next;
+    }
+    return num;
+}
+
+size_t _num_meta_data_bytes() {
+    size_t num = 0;
+    MallocMetadata* cur = _head;
+    while (cur != NULL) {
+        if (!cur->is_free) num += cur->size;
+        cur = cur->next;
+    }
+    return num;
+}
+
+size_t _size_meta_data() {
+    return sizeof(MallocMetadata);
+}
+
+
 /*
  * We have a linked list of the metadata sorted by address
  */
 void _insert(MallocMetadata* element) {
-    if (_head = NULL) {
+    if (_head == NULL) {
         _head = element;
         return;
     }
@@ -50,7 +101,7 @@ void _insert(MallocMetadata* element) {
     cur->next = element;
     element->prev = cur;
     element->next = element_next;
-    element_next->prev = cur;
+    if (element_next) element_next->prev = cur;
 }
 
 bool _check(size_t size) {
@@ -61,9 +112,10 @@ bool _check(size_t size) {
 /*
  * create new metadata at the beginning of the block
  */
-void _createNewMetaData(void* addr, size_t size, MallocMetadata* new_meta) {
-    new_meta = (MallocMetadata*) addr;
-    new_meta->is_free = true;
+void _createNewMetaData(void* addr, size_t size, MallocMetadata** new_meta2) {
+    *new_meta2 = (MallocMetadata*) addr;
+    MallocMetadata* new_meta = *new_meta2;
+    (new_meta->is_free) = true;
     new_meta->size = size;
     _insert(new_meta);
 }
@@ -71,9 +123,9 @@ void _createNewMetaData(void* addr, size_t size, MallocMetadata* new_meta) {
 /*
  * Gets a block and returns its metadata
  */
-void _getMetaData(void* addr, MallocMetadata* meta) {
-    void* meta_addr = (void*) ((__int64_t)addr - sizeof(MallocMetadata));
-    meta = (MallocMetadata*) meta_addr;
+void _getMetaData(void* addr, MallocMetadata** meta) {
+    void* meta_addr = (void*) ((int64_t)addr - sizeof(MallocMetadata));
+    *meta = (MallocMetadata*) meta_addr;
 }
 
 void* smalloc(size_t size) {
@@ -82,29 +134,44 @@ void* smalloc(size_t size) {
     if (empty_block != NULL) // if found an existing empty block
         return empty_block;
 
-    void* sbrk_ret = sbrk(size+ sizeof(MallocMetadata)); // increase heap
+    void* sbrk_ret = sbrk(size + sizeof(MallocMetadata)); // increase heap
     int val = *((int*)sbrk_ret);
     if (val == -1) return NULL;
 
     MallocMetadata* new_meta;
-    _createNewMetaData(sbrk_ret, size, new_meta);
+    _createNewMetaData(sbrk_ret, size, &new_meta);
 
-    void* ret_addr = (void*) ((__int64_t)sbrk_ret + sizeof(MallocMetadata)); // Get the actual data address
+    void* ret_addr = (void*) ((int64_t)sbrk_ret + sizeof(MallocMetadata)); // Get the actual data address
     return ret_addr;
 }
 
-void* scalloc(size_t size) {
-    void* ret_addr = smalloc(size);
+void* scalloc(size_t num, size_t size) {
+    void* ret_addr = smalloc(size*num);
     if (ret_addr == NULL) return NULL;
-    for (int i = 0; i < size; i++) *((int*)ret_addr + i) = 0; // Check this...
+    memset(ret_addr, 0, size*num);
     return ret_addr;
 }
 
-void sfree(void* p){
+void sfree(void* p) {
     if (p == NULL) return;;
     MallocMetadata* meta;
-    _getMetaData(p, meta);
+    _getMetaData(p, &meta);
+    void* meta_addr = (void*) ((int64_t)p - sizeof(MallocMetadata));
     meta->is_free = false;
+}
+
+void* srealloc(void* oldp, size_t size) {
+    MallocMetadata* meta;
+    _getMetaData(oldp, &meta);
+    if (meta->size > size) return oldp;
+
+    void* new_addr = smalloc(size);
+    if (new_addr == NULL) return NULL;
+
+    memcpy(new_addr, oldp, size);
+    sfree(oldp);
+
+    return new_addr;
 }
 
 #endif // MALLOC2
