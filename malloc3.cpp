@@ -24,6 +24,7 @@ struct MallocMetadata {
 };
 
 MallocMetadata* _head; // Global variable to the head of the linked list
+MallocMetadata* _tail; // Global variable to the last element of the linked list (used in challenge 3)
 
 /*
  * Searches for an empty block that fits the size
@@ -83,7 +84,6 @@ size_t _size_meta_data() {
     return sizeof(MallocMetadata);
 }
 
-
 /*
  * We have a linked list of the metadata sorted by address
  */
@@ -97,11 +97,13 @@ void _insert(MallocMetadata* element) {
     while (cur->next != NULL && cur->next < element) { // the list is sorted by the elements address
         cur = cur->next;
     }
+
     MallocMetadata* element_next = cur->next;
     cur->next = element;
     element->prev = cur;
     element->next = element_next;
     if (element_next) element_next->prev = cur;
+    if (cur == _tail) _tail = element; // update tail
 }
 
 bool _check(size_t size) {
@@ -128,12 +130,33 @@ void _getMetaData(void* addr, MallocMetadata** meta) {
     *meta = (MallocMetadata*) meta_addr;
 }
 
+void _split_block(MallocMetadata* element, size_t size) {
+    if (element->size - size < 128 + sizeof(MallocMetadata)) return; // If not big enough to split
+    element->size = size;
+    MallocMetadata* splited_part_meta;
+    size_t new_block_size = element->size - size - sizeof(MallocMetadata);
+    void* start_adress = element + sizeof(MallocMetadata) + size;
+    _createNewMetaData(start_adress, new_block_size, &splited_part_meta);
+}
+
+void* _addToWilderness(size_t size) {
+    void* sbrk_ret = sbrk(size - _tail->size); // increase heap
+    int val = *((int*)sbrk_ret);
+    if (val == -1) return NULL;
+    _tail->is_free = false;
+    _tail->size = size;
+    return (void*) ((int64_t)_tail + sizeof(MallocMetadata));
+}
+
 void* smalloc(size_t size) {
     if (_check(size) == false) return NULL;
     MallocMetadata* empty_block = _find(size);
-    if (empty_block != NULL) // if found an existing empty block
+    if (empty_block != NULL) { // if found an existing empty block
+        _split_block(empty_block, size);
         return (void*) ((int64_t)empty_block + sizeof(MallocMetadata));
+    }
 
+    if (_tail->is_free) return _addToWilderness(size);
 
     void* sbrk_ret = sbrk(size + sizeof(MallocMetadata)); // increase heap
     int val = *((int*)sbrk_ret);
@@ -154,31 +177,11 @@ void* scalloc(size_t num, size_t size) {
     return ret_addr;
 }
 
-
-static void glueTogether(MallocMetadata* toFree){
-    MallocMetadata* prev = toFree->prev;
-    MallocMetadata* next = toFree->next;
-    MallocMetadata* start = toFree;
-    size_t size = toFree->size;
-    if (prev->is_free){
-        start = prev;
-        size = size + prev->size + sizeof(MallocMetadata);
-        start->next = next;
-        start->size = size;
-    }
-    if (next->is_free){
-        size = size + next->size + sizeof(MallocMetadata);
-        start->next = next->next;
-        start->size = size;
-    }
-    start->is_free = true;
-
-}
 void sfree(void* p) {
     if (p == NULL) return;;
     MallocMetadata* meta;
     _getMetaData(p, &meta);
-    glueTogether(meta);
+    meta->is_free = true;
 }
 
 void* srealloc(void* oldp, size_t size) {
@@ -198,4 +201,3 @@ void* srealloc(void* oldp, size_t size) {
 }
 
 #endif // MALLOC3
-
