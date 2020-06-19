@@ -2,6 +2,7 @@
 #define MALLOC3
 
 #include <unistd.h>
+#include <sys/mman.h>
 #include <iostream>
 #include <stdio.h>
 #include <string.h>
@@ -25,6 +26,7 @@ struct MallocMetadata {
 
 MallocMetadata* _head; // Global variable to the head of the linked list
 MallocMetadata* _tail; // Global variable to the last element of the linked list (used in challenge 3)
+MallocMetadata* _m_list_head; // Global variable for head of list of 128kb (or bigger) blocks
 
 /*
  * Searches for an empty block that fits the size
@@ -82,6 +84,68 @@ size_t _num_meta_data_bytes() {
 
 size_t _size_meta_data() {
     return sizeof(MallocMetadata);
+}
+
+void _insertToMLIST(MallocMetadata* element) {
+    if (_m_list_head == NULL) {
+        _m_list_head = element;
+        return;
+    }
+
+    MallocMetadata* cur = _m_list_head;
+    while (cur->next != NULL && cur->next < element) { // the list is sorted by the elements address
+        cur = cur->next;
+    }
+
+    MallocMetadata* element_next = cur->next;
+    cur->next = element;
+    element->prev = cur;
+    element->next = element_next;
+    if (element_next) element_next->prev = cur;
+}
+
+/*
+ * Removes an MallocMetadata from the mList linked list
+ */
+void _removeFromMLIST(MallocMetadata* element) {
+    MallocMetadata* cur = _m_list_head;
+    while (cur != NULL && cur != element) { // the list is sorted by the elements address
+        cur = cur->next;
+    }
+
+    if (_m_list_head == NULL) {
+        cout << "not suppose to get here222" << endl;
+        return;
+    }
+
+    MallocMetadata* element_next = cur->next;
+    MallocMetadata* element_prev = cur->prev;
+    if (element_next) element_next->prev = element_prev;
+    if (element_prev) element_prev->next = element_next;
+    if (cur == _m_list_head) _m_list_head = cur->next;
+}
+
+/*
+ * create new metadata at the beginning of the block
+ */
+void _createNewMetaDataForMLIB(void* addr, size_t size, MallocMetadata** new_meta2) {
+    *new_meta2 = (MallocMetadata*) addr;
+    MallocMetadata* new_meta = *new_meta2;
+    (new_meta->is_free) = true;
+    new_meta->size = size;
+    _insertToMLIST(new_meta);
+}
+
+void* allocWithMmap(size_t size) {
+    void* ret_addr = mmap(NULL, (size+ sizeof(MallocMetadata), PROT_READ | PROT_WRITE, MAP_ANONYMOUS, -1, 0);
+    if (*((int*)ret_addr) == MAP_FAILED) return NULL;
+
+    MallocMetadata* new_meta;
+    _createNewMetaDataForMLIB(ret_addr, size, &new_meta);
+    new_meta->is_free = false;
+
+    void* ret_addr = (void*) ((int64_t)ret_addr + sizeof(MallocMetadata)); // Get the actual data address
+    return ret_addr;
 }
 
 /*
@@ -150,6 +214,9 @@ void* _addToWilderness(size_t size) {
 
 void* smalloc(size_t size) {
     if (_check(size) == false) return NULL;
+
+    if (size > 128*(2^12)) return allocWithMmap(size);
+
     MallocMetadata* empty_block = _find(size);
     if (empty_block != NULL) { // if found an existing empty block
         _split_block(empty_block, size);
@@ -196,11 +263,15 @@ static void glueTogether(MallocMetadata* toFree){
     start->is_free = true;
 
 }
+
 void sfree(void* p) {
     if (p == NULL) return;;
     MallocMetadata* meta;
     _getMetaData(p, &meta);
-    glueTogether(meta);
+    if (meta->size >= 128*(2^12)) {
+        _removeFromMLIST(meta);
+        munmap(meta, meta->size+ sizeof(MallocMetadata));
+    } else glueTogether(meta);
 }
 
 void* srealloc(void* oldp, size_t size) {
@@ -209,7 +280,7 @@ void* srealloc(void* oldp, size_t size) {
 
     MallocMetadata* meta;
     _getMetaData(oldp, &meta);
-    if (meta->size > size) return oldp;
+    if (meta->size >= size) return oldp;
 
     void* new_addr = smalloc(size);
     if (new_addr == NULL) return NULL;
