@@ -19,7 +19,7 @@ int main() {
     for (int i = 0; i < (32 / sizeof(int)); i++) {
         if (ptr2[i] != i) {
             cout << "You have a mistake you stupid bronze 1. Just like Yaron ";
-            cout << "expectd: " << i << " got: " << ptr2[i] << endl;
+            cout << "expected: " << i << " got: " << ptr2[i] << endl;
         }
     }
     cout << endl;
