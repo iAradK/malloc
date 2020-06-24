@@ -5,6 +5,7 @@
 #define WITH_PREV 2
 #define WITH_NEXT 3
 #define WITH_BOTH 4
+#define LAST 5
 
 #include <unistd.h>
 #include <sys/mman.h>
@@ -71,7 +72,7 @@ size_t _num_allocated_blocks() {
     size_t num = 0;
     MallocMetadata* cur = _head;
     while (cur != NULL) {
-        if (!cur->is_free) num++;
+        num++;
         cur = cur->next;
     }
     cur = _m_list_head;
@@ -86,7 +87,7 @@ size_t _num_allocated_bytes() {
     size_t num = 0;
     MallocMetadata* cur = _head;
     while (cur != NULL) {
-        if (!cur->is_free) num += cur->size;
+        num += cur->size;
         cur = cur->next;
     }
     cur = _m_list_head;
@@ -185,6 +186,8 @@ void _insert(MallocMetadata* element) {
     element->prev = cur;
     if (element_next) element_next->prev = element;
     if (cur == _tail || _tail == NULL) _tail = element; // update tail
+    cur = _head;
+    return;
 }
 
 bool _check(size_t size) {
@@ -198,7 +201,7 @@ bool _check(size_t size) {
 void _createNewMetaData(void* addr, size_t size, MallocMetadata** new_meta2) {
     *new_meta2 = (MallocMetadata*) addr;
     MallocMetadata* new_meta = *new_meta2;
-    (new_meta->is_free) = true;
+    (new_meta->is_free) = false;
     new_meta->size = size;
     _insert(new_meta);
 }
@@ -212,17 +215,19 @@ void _getMetaData(void* addr, MallocMetadata** meta) {
 }
 
 void _split_block(MallocMetadata* element, size_t size) {
+    element->is_free = false;
     if (element->size - size < 128 + sizeof(MallocMetadata)) return; // If not big enough to split
     MallocMetadata* splited_part_meta;
-    size_t new_block_size = element->size - size - 2*sizeof(MallocMetadata);
+    size_t new_block_size = element->size - size - sizeof(MallocMetadata);
     int aa = sizeof(MallocMetadata);
     void* start_adress = (void*) ( ((int64_t) element) + aa + size);
     element->size = size;
     if (new_block_size > 128*1024) {
-        munmap(start_adress, new_block_size + sizeof(MallocMetadata));
+        munmap(start_adress, new_block_size);
     }
     else {
         _createNewMetaData(start_adress, new_block_size, &splited_part_meta);
+        splited_part_meta->is_free = true;
     }
 }
 
@@ -279,12 +284,15 @@ static void glueTogether(MallocMetadata* toFree){
         start->next = next;
         start->size = size;
         if (_tail == toFree) _tail = start;
+        if(next) next->prev = start;
+
     }
     if (next && next->is_free){
         size = size + next->size + sizeof(MallocMetadata);
         start->next = next->next;
         start->size = size;
         if (_tail == next) _tail = start;
+        if (next->next) next->next->prev = start;
     }
     start->is_free = true;
 
@@ -302,6 +310,7 @@ void sfree(void* p) {
 }
 
 static int check_realloc_case(MallocMetadata* meta, size_t size){
+    if (_tail == meta) return LAST;
     if (meta->size >= size) return WITH_NOTHING;
     MallocMetadata* prev = meta->prev;
     if (prev && meta->size + prev->size >= size && prev->is_free) return WITH_PREV;
@@ -328,18 +337,24 @@ void* srealloc(void* oldp, size_t size) {
     _getMetaData(oldp, &meta);
     int situation = check_realloc_case(meta,size);
     switch (situation){
+        case LAST:
+            _addToWilderness(size);
         case WITH_NOTHING:
             _split_block(meta,meta->size);
             return oldp;
         case WITH_PREV:
             meta->prev->next = meta->next;
-            return srealloc_helper(meta,meta->prev,meta->size + meta->prev->size, meta->size);
+            if (meta->next) meta->next->prev = meta->prev;
+            return srealloc_helper(meta,meta->prev,meta->size + meta->prev->size + sizeof(MallocMetadata), meta->size);
         case WITH_NEXT:
             meta->next = meta->next->next;
-            return srealloc_helper(meta,meta,meta->size + meta->next->size,meta->size);
+            if(meta->next->next) meta->next->next->prev = meta;
+            return srealloc_helper(meta,meta,meta->size + meta->next->size + sizeof(MallocMetadata),meta->size);
         case WITH_BOTH:
             meta->prev->next = meta->next->next;
-            return srealloc_helper(meta,meta->prev,meta->size + meta->next->size + meta->prev->size,meta->size);
+            if(meta->next->next)meta->next->next->prev = meta->prev;
+            return srealloc_helper(meta,meta->prev,meta->size + meta->next->size + meta->prev->size
+                                                                                   + 2*sizeof(MallocMetadata),meta->size);
         default:
             break;
     }

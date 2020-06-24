@@ -44,17 +44,13 @@ int main() {
     assert(_num_meta_data_bytes() == 5 * META_SIZE);
     //check free, combine and split
     sfree(p3); sfree(p5); sfree(p4); // pic 1
-    int x = _num_free_blocks();
-    p3 = smalloc(1000); p4 = smalloc(1000); p5 = smalloc (1000); // rebuild
-    x = _num_free_blocks();
+    p3 = smalloc(1000);
+    p4 = smalloc(1000);
+    p5 = smalloc (1000); // rebuild
     sfree(p4); sfree(p5);
-    x = _num_free_blocks();
     sfree(p1); sfree(p1); sfree(p2);
-    x = _num_free_blocks();
     p1 = smalloc(1000); p2 = smalloc(1000);// half rebuilt
-    x = _num_free_blocks();
     sfree(p2); sfree(p1);
-    x = _num_free_blocks();
     assert(_num_free_blocks() == 2);
     assert(_num_free_bytes() == 4000 + 2*META_SIZE);
     assert(_num_allocated_blocks() == 3);
@@ -62,6 +58,9 @@ int main() {
     assert(_num_meta_data_bytes() == 3 * META_SIZE);
     assert(_tail == (MallocMetadata*)p4 - 1);
     assert(_head == (MallocMetadata*)p1 - 1);
+
+
+
     //list condition: FREE OF 2032 -> BLOCK OF 1000 -> FREE OF 2032
     p1 = smalloc(1000);
     p2 = smalloc(1000);
@@ -73,7 +72,10 @@ int main() {
     assert(_num_meta_data_bytes() == 4 * META_SIZE);
     assert(_tail == (MallocMetadata*)p4 - 1);
     assert(_head == (MallocMetadata*)p1 - 1);
-    sfree(p1); sfree(p2); sfree(p3); sfree(p4);
+    sfree(p1);
+    sfree(p2);
+    sfree(p3);
+    sfree(p4);
     assert(_num_free_blocks() == 1);
     assert(_num_free_bytes() == 6000+3*META_SIZE);
     assert(_num_allocated_blocks() == 1);
@@ -97,9 +99,12 @@ int main() {
     p6 = srealloc(p6, 2000);
     for (int i = 0; i < 250; ++i)
         assert(*((int*)p6+i) == 2);
+    int x =_num_allocated_bytes();
     assert(_num_free_blocks() == 1);
     assert(_num_free_bytes() == 1000);
     assert(_num_allocated_blocks() == 6);
+    x =_num_allocated_bytes();
+    _num_allocated_blocks();
     assert(_num_allocated_bytes() == 7000);
     assert(_num_meta_data_bytes() == 6*META_SIZE);
     assert(_tail == (MallocMetadata*)p6 - 1);
