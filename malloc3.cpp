@@ -77,7 +77,7 @@ size_t _num_allocated_blocks() {
     return num;
 }
 
-size_t _num_meta_data_bytes() {
+size_t _num_allocated_bytes() {
     size_t num = 0;
     MallocMetadata* cur = _head;
     while (cur != NULL) {
@@ -90,6 +90,10 @@ size_t _num_meta_data_bytes() {
         cur = cur->next;
     }
     return num;
+}
+
+size_t _num_allocated_bytes() {
+    return _num_allocated_blocks()*_size_meta_data();
 }
 
 size_t _size_meta_data() {
