@@ -69,6 +69,11 @@ size_t _num_allocated_blocks() {
         if (!cur->is_free) num++;
         cur = cur->next;
     }
+    cur = _m_list_head;
+    while (cur != NULL) {
+        num++;
+        cur = cur->next;
+    }
     return num;
 }
 
@@ -77,6 +82,11 @@ size_t _num_meta_data_bytes() {
     MallocMetadata* cur = _head;
     while (cur != NULL) {
         if (!cur->is_free) num += cur->size;
+        cur = cur->next;
+    }
+    cur = _m_list_head;
+    while (cur != NULL) {
+        num += cur->size;
         cur = cur->next;
     }
     return num;
@@ -137,7 +147,8 @@ void _createNewMetaDataForMLIB(void* addr, size_t size, MallocMetadata** new_met
 }
 
 void* allocWithMmap(size_t size) {
-    void* ret_addr = mmap(NULL, (size+ sizeof(MallocMetadata), PROT_READ | PROT_WRITE, MAP_ANONYMOUS, -1, 0);
+    void* ret_addr = mmap(NULL, (size+ sizeof(MallocMetadata), PROT_READ | PROT_WRITE,
+                                                                        MAP_ANONYMOUS | mapPrivate, -1, 0);
     if (*((int*)ret_addr) == MAP_FAILED) return NULL;
 
     MallocMetadata* new_meta;
