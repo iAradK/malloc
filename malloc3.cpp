@@ -170,7 +170,7 @@ void* allocWithMmap(size_t size) {
  */
 void _insert(MallocMetadata* element) {
     if (_head == NULL) {
-        _head = element;
+        _head = _tail = element;
         return;
     }
 
@@ -183,8 +183,8 @@ void _insert(MallocMetadata* element) {
     cur->next = element;
     element->next = element_next;
     element->prev = cur;
-    if (element_next) element_next->prev = cur;
-    if (cur == _tail) _tail = element; // update tail
+    if (element_next) element_next->prev = element;
+    if (cur == _tail || _tail == NULL) _tail = element; // update tail
 }
 
 bool _check(size_t size) {
@@ -278,6 +278,7 @@ static void glueTogether(MallocMetadata* toFree){
         size = size + prev->size + sizeof(MallocMetadata);
         start->next = next;
         start->size = size;
+        if (_tail == toFree) _tail = start;
     }
     if (next && next->is_free){
         size = size + next->size + sizeof(MallocMetadata);
@@ -293,13 +294,14 @@ void sfree(void* p) {
     if (p == NULL) return;;
     MallocMetadata* meta;
     _getMetaData(p, &meta);
+    if (meta->is_free) return;
     if (meta->size >= 128*1024) {
         _removeFromMLIST(meta);
         munmap(meta, meta->size+ sizeof(MallocMetadata));
     } else glueTogether(meta);
 }
 
-static int check_realloc_case(MallocMetadata* meta, int size){
+static int check_realloc_case(MallocMetadata* meta, size_t size){
     if (meta->size >= size) return WITH_NOTHING;
     MallocMetadata* prev = meta->prev;
     if (prev && meta->size + prev->size >= size && prev->is_free) return WITH_PREV;
@@ -309,7 +311,7 @@ static int check_realloc_case(MallocMetadata* meta, int size){
     return 0;
 }
 
-static void* srealloc_helper(MallocMetadata* orig, MallocMetadata* base, int size, int orig_size){
+static void* srealloc_helper(MallocMetadata* orig, MallocMetadata* base, size_t size, size_t orig_size){
     void* copy_from = (void*) (((int64_t)orig) + sizeof(MallocMetadata));
     void* copy_to = (void*) ( ((int64_t)base) + sizeof(MallocMetadata));
     base->size = size;

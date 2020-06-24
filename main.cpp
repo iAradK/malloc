@@ -43,12 +43,16 @@ int main() {
     assert(_num_allocated_bytes() == 5000);
     assert(_num_meta_data_bytes() == 5 * META_SIZE);
     //check free, combine and split
-    sfree(p3); sfree(p5); sfree(p4);
-    p3 = smalloc(1000); p4 = smalloc(1000); p5 = smalloc (1000);
-    sfree(p4); sfree(p5);
-    sfree(p1); sfree(p1); sfree(p2);
-    p1 = smalloc(1000); p2 = smalloc(1000);
+    sfree(p3); sfree(p5); sfree(p4); // pic 1
     int x = _num_free_blocks();
+    p3 = smalloc(1000); p4 = smalloc(1000); p5 = smalloc (1000); // rebuild
+    x = _num_free_blocks();
+    sfree(p4); sfree(p5);
+    x = _num_free_blocks();
+    sfree(p1); sfree(p1); sfree(p2);
+    x = _num_free_blocks();
+    p1 = smalloc(1000); p2 = smalloc(1000);// half rebuilt
+    x = _num_free_blocks();
     sfree(p2); sfree(p1);
     x = _num_free_blocks();
     assert(_num_free_blocks() == 2);
