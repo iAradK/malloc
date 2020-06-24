@@ -1,12 +1,17 @@
 #ifndef MALLOC3
 #define MALLOC3
 
+#define WITH_NOTHING 1
+#define WITH_PREV 2
+#define WITH_NEXT 3
+#define WITH_BOTH 4
+
 #include <unistd.h>
 #include <sys/mman.h>
 #include <iostream>
 #include <stdio.h>
 #include <string.h>
-
+#include <math.h>
 
 using namespace std;
 
@@ -92,12 +97,12 @@ size_t _num_allocated_bytes() {
     return num;
 }
 
-size_t _num_meta_data_bytes() {
-    return _num_allocated_blocks()*_size_meta_data();
-}
-
 size_t _size_meta_data() {
     return sizeof(MallocMetadata);
+}
+
+size_t _num_meta_data_bytes() {
+    return _num_allocated_blocks()*_size_meta_data();
 }
 
 void _insertToMLIST(MallocMetadata* element) {
@@ -107,15 +112,12 @@ void _insertToMLIST(MallocMetadata* element) {
     }
 
     MallocMetadata* cur = _m_list_head;
-    while (cur->next != NULL && cur->next < element) { // the list is sorted by the elements address
+    while (cur->next != NULL) {
         cur = cur->next;
     }
 
-    MallocMetadata* element_next = cur->next;
     cur->next = element;
     element->prev = cur;
-    element->next = element_next;
-    if (element_next) element_next->prev = cur;
 }
 
 /*
@@ -151,16 +153,16 @@ void _createNewMetaDataForMLIB(void* addr, size_t size, MallocMetadata** new_met
 }
 
 void* allocWithMmap(size_t size) {
-    void* ret_addr = mmap(NULL, (size+ sizeof(MallocMetadata), PROT_READ | PROT_WRITE,
-                                                                        MAP_ANONYMOUS | mapPrivate, -1, 0);
-    if (*((int*)ret_addr) == MAP_FAILED) return NULL;
+    void* ret_addr = mmap(NULL, (size+ sizeof(MallocMetadata)), PROT_READ | PROT_WRITE,
+                                                                        MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    if (ret_addr == MAP_FAILED) return NULL;
 
     MallocMetadata* new_meta;
     _createNewMetaDataForMLIB(ret_addr, size, &new_meta);
     new_meta->is_free = false;
 
-    void* ret_addr = (void*) ((int64_t)ret_addr + sizeof(MallocMetadata)); // Get the actual data address
-    return ret_addr;
+    void* ret_addr2 = (void*) ((int64_t)ret_addr + sizeof(MallocMetadata)); // Get the actual data address
+    return ret_addr2;
 }
 
 /*
@@ -186,7 +188,7 @@ void _insert(MallocMetadata* element) {
 }
 
 bool _check(size_t size) {
-    if (size == 0 || size > (10 << 8) ) return false;
+    if (size == 0 || size > pow(10,8) ) return false;
     return true;
 }
 
@@ -211,11 +213,12 @@ void _getMetaData(void* addr, MallocMetadata** meta) {
 
 void _split_block(MallocMetadata* element, size_t size) {
     if (element->size - size < 128 + sizeof(MallocMetadata)) return; // If not big enough to split
-    element->size = size;
     MallocMetadata* splited_part_meta;
-    size_t new_block_size = element->size - size - sizeof(MallocMetadata);
-    void* start_adress = element + sizeof(MallocMetadata) + size;
+    size_t new_block_size = element->size - size - 2*sizeof(MallocMetadata);
+    int aa = sizeof(MallocMetadata);
+    void* start_adress = (void*) ( ((int64_t) element) + aa + size);
     _createNewMetaData(start_adress, new_block_size, &splited_part_meta);
+    element->size -= (sizeof(MallocMetadata) + new_block_size);
 }
 
 void* _addToWilderness(size_t size) {
@@ -230,7 +233,7 @@ void* _addToWilderness(size_t size) {
 void* smalloc(size_t size) {
     if (_check(size) == false) return NULL;
 
-    if (size > 128*(2^12)) return allocWithMmap(size);
+    if (size > 128*1024) return allocWithMmap(size);
 
     MallocMetadata* empty_block = _find(size);
     if (empty_block != NULL) { // if found an existing empty block
@@ -247,6 +250,7 @@ void* smalloc(size_t size) {
     MallocMetadata* new_meta;
     _createNewMetaData(sbrk_ret, size, &new_meta);
     new_meta->is_free = false;
+    _split_block(new_meta, size);
 
     void* ret_addr = (void*) ((int64_t)sbrk_ret + sizeof(MallocMetadata)); // Get the actual data address
     return ret_addr;
@@ -283,10 +287,29 @@ void sfree(void* p) {
     if (p == NULL) return;;
     MallocMetadata* meta;
     _getMetaData(p, &meta);
-    if (meta->size >= 128*(2^12)) {
+    if (meta->size >= 128*1024) {
         _removeFromMLIST(meta);
         munmap(meta, meta->size+ sizeof(MallocMetadata));
     } else glueTogether(meta);
+}
+
+static int check_realloc_case(MallocMetadata* meta, int size){
+    if (meta->size >= size) return WITH_NOTHING;
+    MallocMetadata* prev = meta->prev;
+    if (prev && meta->size + prev->size >= size && prev->is_free) return WITH_PREV;
+    MallocMetadata* next = meta->next;
+    if (next && meta->size + next->size >= size && next->is_free) return WITH_NEXT;
+    if (next && prev && meta->size + prev->size + next->size >= size && prev->is_free && next->is_free) return WITH_BOTH;
+    return 0;
+}
+
+static void* srealloc_helper(MallocMetadata* orig, MallocMetadata* base, int size, int orig_size){
+    void* copy_from = (void*) (((int64_t)orig) + sizeof(MallocMetadata));
+    void* copy_to = (void*) ( ((int64_t)base) + sizeof(MallocMetadata));
+    base->size = size;
+    memcpy(copy_to, copy_from, orig_size);
+    _split_block(base,orig_size);
+    return copy_to;
 }
 
 void* srealloc(void* oldp, size_t size) {
@@ -295,14 +318,56 @@ void* srealloc(void* oldp, size_t size) {
 
     MallocMetadata* meta;
     _getMetaData(oldp, &meta);
+    int situation = check_realloc_case(meta,size);
+    switch (situation){
+        case WITH_NOTHING:
+            _split_block(meta,meta->size);
+            return oldp;
+        case WITH_PREV:
+            meta->prev->next = meta->next;
+            return srealloc_helper(meta,meta->prev,meta->size + meta->prev->size, meta->size);
+        case WITH_NEXT:
+            meta->next = meta->next->next;
+            return srealloc_helper(meta,meta,meta->size + meta->next->size,meta->size);
+        case WITH_BOTH:
+            meta->prev->next = meta->next->next;
+            return srealloc_helper(meta,meta->prev,meta->size + meta->next->size + meta->prev->size,meta->size);
+        default:
+            break;
+    }
+
+    void* new_addr = smalloc(size);
+    if (new_addr == NULL) return NULL;
+    MallocMetadata* meta2;
+    // void* a = (void*) ((int64_t) new_addr + meta->size);
+    _getMetaData(new_addr, &meta2);
+    int aa = sizeof(MallocMetadata);
+    void* a = (void*) ( ((int64_t) meta2) + aa + meta->size );
+    memcpy(new_addr, oldp, size);
+    _split_block(meta2, meta->size);
+    sfree(oldp);
+    return new_addr;
+}
+
+/*
+void* srealloc(void* oldp, size_t size) {
+    if (oldp == NULL)
+        return smalloc(size);
+
+    MallocMetadata* meta;
+    MallocMetadata* meta2;
+    _getMetaData(oldp, &meta);
+    int oldSize = meta->size;
     if (meta->size >= size) return oldp;
 
     void* new_addr = smalloc(size);
+    _getMetaData(new_addr, &meta2);
+    _split_block(meta2, oldSize);
     if (new_addr == NULL) return NULL;
 
     memcpy(new_addr, oldp, size);
     sfree(oldp);
     return new_addr;
 }
-
+*/
 #endif // MALLOC3
