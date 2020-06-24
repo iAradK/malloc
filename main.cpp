@@ -99,11 +99,9 @@ int main() {
     p6 = srealloc(p6, 2000);
     for (int i = 0; i < 250; ++i)
         assert(*((int*)p6+i) == 2);
-    int x =_num_allocated_bytes();
     assert(_num_free_blocks() == 1);
     assert(_num_free_bytes() == 1000);
     assert(_num_allocated_blocks() == 6);
-    x =_num_allocated_bytes();
     _num_allocated_blocks();
     assert(_num_allocated_bytes() == 7000);
     assert(_num_meta_data_bytes() == 6*META_SIZE);
@@ -113,20 +111,21 @@ int main() {
     p1 = srealloc(p1,500-sizeof(MallocMetadata));
     sfree(p1);
     //check case a
-
     assert(((MallocMetadata*)p5-1)->is_free==false);
     sfree(p5); sfree(p3);
     //check case b
     p3 = srealloc(p4,2000);
     //LIST CONDITION: 1-> 1000 FREE, 2->1000, 3->2000,
-    // 5-> 1000 FREE, 6->2000 FREE
+    // 5-> 1000 FREE, 6->2000
     //now i return the list to its state before tha last realloc
-    p3 = srealloc(p3,1000);
+    p3 = srealloc(p3,1000); // the same
     p4 = ((char*)p3 + 1000 + META_SIZE);
     p1 = smalloc(1000); p4=smalloc(1000); sfree(p1);
     sfree(p3);
+    _num_allocated_blocks();
     //check case d
     p3 = srealloc(p4,3000);
+    int x =_num_free_blocks();
     assert(_num_free_blocks() == 1);
     assert(_num_free_bytes() == 1000);
     assert(_num_allocated_blocks() == 4);

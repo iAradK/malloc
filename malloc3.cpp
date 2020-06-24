@@ -340,21 +340,21 @@ void* srealloc(void* oldp, size_t size) {
         case LAST:
             _addToWilderness(size);
         case WITH_NOTHING:
-            _split_block(meta,meta->size);
+            _split_block(meta,size);
             return oldp;
         case WITH_PREV:
             meta->prev->next = meta->next;
             if (meta->next) meta->next->prev = meta->prev;
-            return srealloc_helper(meta,meta->prev,meta->size + meta->prev->size + sizeof(MallocMetadata), meta->size);
+            return srealloc_helper(meta,meta->prev,meta->size + meta->prev->size + sizeof(MallocMetadata), size);
         case WITH_NEXT:
             meta->next = meta->next->next;
             if(meta->next->next) meta->next->next->prev = meta;
-            return srealloc_helper(meta,meta,meta->size + meta->next->size + sizeof(MallocMetadata),meta->size);
+            return srealloc_helper(meta,meta,meta->size + meta->next->size + sizeof(MallocMetadata),size);
         case WITH_BOTH:
             meta->prev->next = meta->next->next;
             if(meta->next->next)meta->next->next->prev = meta->prev;
             return srealloc_helper(meta,meta->prev,meta->size + meta->next->size + meta->prev->size
-                                                                                   + 2*sizeof(MallocMetadata),meta->size);
+                                                                                   + 2*sizeof(MallocMetadata),size);
         default:
             break;
     }
