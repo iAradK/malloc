@@ -20,13 +20,11 @@ int main() {
     p3 = srealloc(p3, 20000000);
     p3 = srealloc(p3, 10000000);
     p4 = srealloc(nullptr, 10000000);
-    //assert(_num_free_blocks() == 0);
-    //assert(_num_free_bytes() == 0);
+    assert(_num_free_blocks() == 0);
+    assert(_num_free_bytes() == 0);
     assert(_num_allocated_blocks() == 4);
 
-    int x = _num_allocated_bytes();
-    int y = 100000000 + 30000000;
-    //assert(_num_allocated_bytes() == 100000000 + 30000000);
+    assert(_num_allocated_bytes() == 100000000 + 30000000);
     assert(_num_meta_data_bytes() == 4 * META_SIZE);
     sfree(p1), sfree(p2), sfree(p3), sfree(p4);
     assert(_num_free_blocks() == 0);
@@ -50,7 +48,9 @@ int main() {
     sfree(p4); sfree(p5);
     sfree(p1); sfree(p1); sfree(p2);
     p1 = smalloc(1000); p2 = smalloc(1000);
+    int x = _num_free_blocks();
     sfree(p2); sfree(p1);
+    x = _num_free_blocks();
     assert(_num_free_blocks() == 2);
     assert(_num_free_bytes() == 4000 + 2*META_SIZE);
     assert(_num_allocated_blocks() == 3);

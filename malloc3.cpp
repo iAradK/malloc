@@ -181,8 +181,8 @@ void _insert(MallocMetadata* element) {
 
     MallocMetadata* element_next = cur->next;
     cur->next = element;
-    element->prev = cur;
     element->next = element_next;
+    element->prev = cur;
     if (element_next) element_next->prev = cur;
     if (cur == _tail) _tail = element; // update tail
 }
@@ -217,8 +217,13 @@ void _split_block(MallocMetadata* element, size_t size) {
     size_t new_block_size = element->size - size - 2*sizeof(MallocMetadata);
     int aa = sizeof(MallocMetadata);
     void* start_adress = (void*) ( ((int64_t) element) + aa + size);
-    _createNewMetaData(start_adress, new_block_size, &splited_part_meta);
-    element->size -= (sizeof(MallocMetadata) + new_block_size);
+    element->size = size;
+    if (new_block_size > 128*1024) {
+        munmap(start_adress, new_block_size + sizeof(MallocMetadata));
+    }
+    else {
+        _createNewMetaData(start_adress, new_block_size, &splited_part_meta);
+    }
 }
 
 void* _addToWilderness(size_t size) {
@@ -241,7 +246,7 @@ void* smalloc(size_t size) {
         return (void*) ((int64_t)empty_block + sizeof(MallocMetadata));
     }
 
-    if (_tail->is_free) return _addToWilderness(size);
+    if (_tail && _tail->is_free) return _addToWilderness(size);
 
     void* sbrk_ret = sbrk(size + sizeof(MallocMetadata)); // increase heap
     int val = *((int*)sbrk_ret);
@@ -268,16 +273,17 @@ static void glueTogether(MallocMetadata* toFree){
     MallocMetadata* next = toFree->next;
     MallocMetadata* start = toFree;
     size_t size = toFree->size;
-    if (prev->is_free){
+    if (prev && prev->is_free){
         start = prev;
         size = size + prev->size + sizeof(MallocMetadata);
         start->next = next;
         start->size = size;
     }
-    if (next->is_free){
+    if (next && next->is_free){
         size = size + next->size + sizeof(MallocMetadata);
         start->next = next->next;
         start->size = size;
+        if (_tail == next) _tail = start;
     }
     start->is_free = true;
 
