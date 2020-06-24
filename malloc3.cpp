@@ -92,7 +92,7 @@ size_t _num_allocated_bytes() {
     return num;
 }
 
-size_t _num_allocated_bytes() {
+size_t _num_meta_data_bytes() {
     return _num_allocated_blocks()*_size_meta_data();
 }
 
