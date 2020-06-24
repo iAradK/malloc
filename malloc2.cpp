@@ -158,7 +158,6 @@ void sfree(void* p) {
     if (p == NULL) return;;
     MallocMetadata* meta;
     _getMetaData(p, &meta);
-    void* meta_addr = (void*) ((int64_t)p - sizeof(MallocMetadata));
     meta->is_free = true;
 }
 
@@ -168,7 +167,7 @@ void* srealloc(void* oldp, size_t size) {
 
     MallocMetadata* meta;
     _getMetaData(oldp, &meta);
-    if (meta->size > size) return oldp;
+    if (meta->size >= size) return oldp;
 
     void* new_addr = smalloc(size);
     if (new_addr == NULL) return NULL;
