@@ -137,10 +137,12 @@ int main() {
     p4 = smalloc(1500);
     p5 = smalloc(1000);
     sfree(p1); sfree(p3); sfree(p5);
+    _num_free_blocks();
     //check case c
     p4 = srealloc(p4, 2500);
+    _num_free_blocks();
     p4 = srealloc(p4, 1000);
-
+    _num_free_blocks();
     assert(_num_free_blocks() == 3);
     assert(_num_free_bytes() == 3000);
     assert(_num_allocated_blocks() == 6);
@@ -152,6 +154,7 @@ int main() {
     sfree(p1);
     //check case e
     p1 = srealloc(p3, 900);
+    _num_free_blocks();
     assert(_num_free_blocks() == 2);
     assert(_num_free_bytes() == 2000);
     assert(_num_allocated_blocks() == 6);

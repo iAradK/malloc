@@ -335,6 +335,8 @@ void* srealloc(void* oldp, size_t size) {
 
     MallocMetadata* meta;
     _getMetaData(oldp, &meta);
+    MallocMetadata* next_out;
+    MallocMetadata* cur_out;
     int situation = check_realloc_case(meta,size);
     switch (situation){
         case LAST:
@@ -347,13 +349,16 @@ void* srealloc(void* oldp, size_t size) {
             if (meta->next) meta->next->prev = meta->prev;
             return srealloc_helper(meta,meta->prev,meta->size + meta->prev->size + sizeof(MallocMetadata), size);
         case WITH_NEXT:
+            next_out = meta->next;
             meta->next = meta->next->next;
-            if(meta->next->next) meta->next->next->prev = meta;
-            return srealloc_helper(meta,meta,meta->size + meta->next->size + sizeof(MallocMetadata),size);
+            if(meta->next) meta->next->prev = meta;
+            return srealloc_helper(meta,meta,meta->size + next_out->size + sizeof(MallocMetadata),size);
         case WITH_BOTH:
+            cur_out = meta;
+            next_out = meta->next;
             meta->prev->next = meta->next->next;
             if(meta->next->next)meta->next->next->prev = meta->prev;
-            return srealloc_helper(meta,meta->prev,meta->size + meta->next->size + meta->prev->size
+            return srealloc_helper(meta,meta->prev,cur_out->size + next_out->size + cur_out->prev->size
                                                                                    + 2*sizeof(MallocMetadata),size);
         default:
             break;
@@ -367,7 +372,7 @@ void* srealloc(void* oldp, size_t size) {
     int aa = sizeof(MallocMetadata);
     void* a = (void*) ( ((int64_t) meta2) + aa + meta->size );
     memcpy(new_addr, oldp, size);
-    _split_block(meta2, meta->size);
+    _split_block(meta2, size);
     sfree(oldp);
     return new_addr;
 }
