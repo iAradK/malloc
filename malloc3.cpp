@@ -341,6 +341,9 @@ void* srealloc(void* oldp, size_t size) {
     if (oldp == NULL)
         return smalloc(size);
 
+    if (!_check(size))
+        return NULL;
+
     MallocMetadata* meta;
     _getMetaData(oldp, &meta);
     MallocMetadata* next_out;
