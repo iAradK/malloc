@@ -63,17 +63,17 @@ size_t _num_allocated_blocks() {
     size_t num = 0;
     MallocMetadata* cur = _head;
     while (cur != NULL) {
-        if (!cur->is_free) num++;
+        num++;
         cur = cur->next;
     }
     return num;
 }
 
-size_t _num_meta_data_bytes() {
+size_t _num_allocated_bytes() {
     size_t num = 0;
     MallocMetadata* cur = _head;
     while (cur != NULL) {
-        if (!cur->is_free) num += cur->size;
+        num += cur->size;
         cur = cur->next;
     }
     return num;
@@ -83,6 +83,9 @@ size_t _size_meta_data() {
     return sizeof(MallocMetadata);
 }
 
+size_t _num_meta_data_bytes() {
+    return _num_allocated_blocks()*_size_meta_data();
+}
 
 /*
  * We have a linked list of the metadata sorted by address

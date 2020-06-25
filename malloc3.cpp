@@ -106,6 +106,12 @@ size_t _num_meta_data_bytes() {
     return _num_allocated_blocks()*_size_meta_data();
 }
 
+static void updateTail(){
+    _tail = _head;
+    while(_tail && _tail->next != NULL){
+        _tail = _tail->next;
+    }
+}
 void _insertToMLIST(MallocMetadata* element) {
     if (_m_list_head == NULL) {
         _m_list_head = element;
@@ -221,8 +227,9 @@ void _split_block(MallocMetadata* element, size_t size) {
     size_t new_block_size = element->size - size - sizeof(MallocMetadata);
     int aa = sizeof(MallocMetadata);
     void* start_adress = (void*) ( ((int64_t) element) + aa + size);
+    size_t orig_size = element->size;
     element->size = size;
-    if (new_block_size > 128*1024) {
+    if (orig_size > 128*1024) {
         munmap(start_adress, new_block_size);
     }
     else {
@@ -250,7 +257,7 @@ void* smalloc(size_t size) {
         _split_block(empty_block, size);
         return (void*) ((int64_t)empty_block + sizeof(MallocMetadata));
     }
-
+    MallocMetadata* arad = _tail;
     if (_tail && _tail->is_free) return _addToWilderness(size);
 
     void* sbrk_ret = sbrk(size + sizeof(MallocMetadata)); // increase heap
@@ -326,6 +333,7 @@ static void* srealloc_helper(MallocMetadata* orig, MallocMetadata* base, size_t 
     base->size = size;
     memcpy(copy_to, copy_from, orig_size);
     _split_block(base,orig_size);
+    updateTail();
     return copy_to;
 }
 
