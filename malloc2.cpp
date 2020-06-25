@@ -135,7 +135,10 @@ void* smalloc(size_t size) {
     if (_check(size) == false) return NULL;
     MallocMetadata* empty_block = _find(size);
     if (empty_block != NULL) // if found an existing empty block
-        return (void*) ((int64_t)empty_block + sizeof(MallocMetadata));
+    {
+        empty_block->is_free = false;
+        return (void *) ((int64_t) empty_block + sizeof(MallocMetadata));
+    }
 
 
     void* sbrk_ret = sbrk(size + sizeof(MallocMetadata)); // increase heap
